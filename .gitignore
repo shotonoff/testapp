@@ -1,0 +1,7 @@
+.idea
+
+# Go workspace file
+go.work
+
+# Test binary, built with `go test -c`
+*.test
