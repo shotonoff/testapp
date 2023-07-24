@@ -1,0 +1,30 @@
+version: '3.9'
+
+services:
+  server:
+    image: testapp/testapp:latest
+    build:
+      context: .
+      dockerfile: ./DOCKER/Dockerfile
+    networks:
+      testapp:
+
+  client:
+    image: testapp/testapp:latest
+    command:
+      - srvd
+      - "ask-quote"
+      - "-a"
+      - server:5001
+    profiles:
+      - donotstart
+    depends_on:
+      - server
+    networks:
+      testapp:
+
+networks:
+  testapp:
+    driver: bridge
+    ipam:
+      driver: default
