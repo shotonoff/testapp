@@ -27,14 +27,29 @@ var quotes = []string{
 	"The greatest day in your life and mine is when we take total responsibility for our attitudes. That’s the day we truly grow up",
 }
 
-// Store is a store of quotes
-type Store struct {
-	quotes []string
+type (
+	// Store is a store of quotes
+	Store struct {
+		quotes []string
+	}
+	// Option is a store option
+	Option func(*Store)
+)
+
+// WithQuotes sets quotes for a store
+func WithQuotes(quotes []string) Option {
+	return func(s *Store) {
+		s.quotes = quotes
+	}
 }
 
 // New returns a new quote store with predefined quotes
-func New() *Store {
-	return &Store{quotes: quotes}
+func New(opts ...Option) *Store {
+	store := &Store{quotes: quotes}
+	for _, opt := range opts {
+		opt(store)
+	}
+	return store
 }
 
 // Random returns a random quote

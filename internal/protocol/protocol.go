@@ -25,6 +25,8 @@ type (
 		Writer
 		Reader
 		Closer
+		MessageSender
+		MessageReceiver
 	}
 	// Scenario is a list of tasks
 	Scenario []TaskFunc
@@ -55,14 +57,22 @@ type (
 	}
 	// Reader is an interface for a reader
 	Reader interface {
-		Read(ctx context.Context) ([]byte, error)
+		Read() ([]byte, error)
 	}
 	// Writer is an interface for a writer
 	Writer interface {
-		Write(ctx context.Context, data []byte) error
+		Write(data []byte) error
 	}
 	Closer interface {
 		Close() error
+	}
+	// MessageSender is an interface for a message sender
+	MessageSender interface {
+		SendMsg(ctx context.Context, msg any) error
+	}
+	// MessageReceiver is an interface for a message receiver
+	MessageReceiver interface {
+		ReceiveMsg(ctx context.Context, msg any) error
 	}
 )
 
@@ -121,7 +131,7 @@ type Conn struct {
 }
 
 // Read reads a message from a connection
-func (c *Conn) Read(ctx context.Context) ([]byte, error) {
+func (c *Conn) Read() ([]byte, error) {
 	header := make([]byte, 4)
 	_, err := c.conn.Read(header)
 	if err != nil {
@@ -143,7 +153,7 @@ func (c *Conn) Read(ctx context.Context) ([]byte, error) {
 }
 
 // Write writes a message to a connection
-func (c *Conn) Write(ctx context.Context, data []byte) error {
+func (c *Conn) Write(data []byte) error {
 	msgSize := len(data)
 	header := make([]byte, 4)
 	binary.BigEndian.PutUint32(header, uint32(msgSize))
@@ -163,6 +173,52 @@ func (c *Conn) Write(ctx context.Context, data []byte) error {
 	return nil
 }
 
+// SendMsg sends a message to remote server
+func (c *Conn) SendMsg(ctx context.Context, msg any) error {
+	data, err := Marshal(msg)
+	if err != nil {
+		return err
+	}
+	errCh := make(chan error)
+	go func() {
+		select {
+		case <-ctx.Done():
+		case errCh <- c.Write(data):
+		}
+	}()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err = <-errCh:
+		return err
+	}
+}
+
+// ReceiveMsg reads a message from remote server
+func (c *Conn) ReceiveMsg(ctx context.Context, msg any) error {
+	errCh := make(chan error)
+	go func() {
+		data, err := c.Read()
+		if err != nil {
+			select {
+			case <-ctx.Done():
+			case errCh <- err:
+			}
+			return
+		}
+		select {
+		case <-ctx.Done():
+		case errCh <- Unmarshal(data, msg):
+		}
+	}()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-errCh:
+		return err
+	}
+}
+
 // Close closes the connection
 func (c *Conn) Close() error {
 	return c.conn.Close()
@@ -179,11 +235,7 @@ func Dial(addr string) (Connection, error) {
 }
 
 func receiveChallenge(ctx context.Context, execState *ExecutionState, conn Connection) error {
-	data, err := conn.Read(ctx)
-	if err != nil {
-		return err
-	}
-	return Unmarshal(data, &execState.Challenge)
+	return conn.ReceiveMsg(ctx, &execState.Challenge)
 }
 
 func solveChallenge(ctx context.Context, execState *ExecutionState, conn Connection) error {
@@ -193,19 +245,11 @@ func solveChallenge(ctx context.Context, execState *ExecutionState, conn Connect
 	}
 	execState.Solution.Nonce = nonce
 	execState.Solution.Hash = hash
-	data, err := Marshal(execState.Solution)
-	if err != nil {
-		return err
-	}
-	return conn.Write(ctx, data)
+	return conn.SendMsg(ctx, execState.Solution)
 }
 
 func receiveQuote(ctx context.Context, execState *ExecutionState, conn Connection) error {
-	data, err := conn.Read(ctx)
-	if err != nil {
-		return err
-	}
-	return Unmarshal(data, &execState.Quote)
+	return conn.ReceiveMsg(ctx, &execState.Quote)
 }
 
 func generateChallenge(ctx context.Context, execState *ExecutionState, conn Connection) error {
@@ -215,19 +259,11 @@ func generateChallenge(ctx context.Context, execState *ExecutionState, conn Conn
 		Difficulty: Difficulty,
 		Data:       challenge,
 	}
-	data, err := Marshal(execState.Challenge)
-	if err != nil {
-		return err
-	}
-	return conn.Write(ctx, data)
+	return conn.SendMsg(ctx, execState.Challenge)
 }
 
 func receiveSolution(ctx context.Context, execState *ExecutionState, conn Connection) error {
-	data, err := conn.Read(ctx)
-	if err != nil {
-		return err
-	}
-	err = Unmarshal(data, &execState.Solution)
+	err := conn.ReceiveMsg(ctx, &execState.Solution)
 	if err != nil {
 		return err
 	}
@@ -245,10 +281,6 @@ func receiveSolution(ctx context.Context, execState *ExecutionState, conn Connec
 func sendQuote(quote *qoute.Store) TaskFunc {
 	return func(ctx context.Context, execState *ExecutionState, conn Connection) error {
 		execState.Quote.Text = quote.Random()
-		data, err := Marshal(execState.Quote)
-		if err != nil {
-			return err
-		}
-		return conn.Write(ctx, data)
+		return conn.SendMsg(ctx, execState.Quote)
 	}
 }

@@ -5,11 +5,14 @@ import (
 	"github.com/shotonoff/worldOfWisdom/internal/log"
 	"net"
 	"sync"
+	"time"
 )
 
 const (
 	Type       = "tcp"
 	Difficulty = 3
+
+	requestTimeout = 100 * time.Millisecond
 )
 
 type (
@@ -26,13 +29,21 @@ type (
 		listener net.Listener
 		quit     chan struct{}
 		wg       sync.WaitGroup
+		timeout  time.Duration
 	}
-	// OptionFunc is a function that sets an option
-	OptionFunc func(*Server)
+	// ServerOption is a function that sets an option
+	ServerOption func(*Server)
 )
 
+// WithTimeout is an option function that sets the request timeout
+func WithTimeout(timeout time.Duration) ServerOption {
+	return func(s *Server) {
+		s.timeout = timeout
+	}
+}
+
 // NewServer creates a new server
-func NewServer(addr string, opts ...OptionFunc) (*Server, error) {
+func NewServer(addr string, opts ...ServerOption) (*Server, error) {
 	listener, err := net.Listen(Type, addr)
 	if err != nil {
 		return nil, err
@@ -41,6 +52,7 @@ func NewServer(addr string, opts ...OptionFunc) (*Server, error) {
 		logger:   log.NewNop(),
 		listener: listener,
 		quit:     make(chan struct{}),
+		timeout:  requestTimeout,
 	}
 	for _, opt := range opts {
 		opt(srv)
@@ -78,10 +90,19 @@ func (s *Server) Stop() {
 func (s *Server) accept(ctx context.Context, hd HandlerFunc) error {
 	conn, err := s.listener.Accept()
 	if err != nil {
-		return err
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-s.quit:
+			return nil
+		default:
+			return err
+		}
 	}
 	s.logger.Debug("Accepted connection")
 	go func() {
+		ctx, cancel := context.WithTimeout(ctx, s.timeout)
+		defer cancel()
 		s.wg.Add(1)
 		defer s.wg.Done()
 		_ = hd(ctx, &Conn{conn})
