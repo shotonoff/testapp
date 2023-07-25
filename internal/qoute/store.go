@@ -2,7 +2,12 @@ package qoute
 
 import (
 	"math/rand"
+	"time"
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
 
 var quotes = []string{
 	"The only true wisdom is in knowing you know nothing.",
@@ -52,7 +57,7 @@ func New(opts ...Option) *Store {
 	return store
 }
 
-// Random returns a random quote
-func (q *Store) Random() string {
+// GetRandomQuote returns a random quote
+func (q *Store) GetRandomQuote() string {
 	return q.quotes[rand.Intn(len(q.quotes))]
 }

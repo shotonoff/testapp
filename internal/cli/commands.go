@@ -26,7 +26,8 @@ func RootCommand() *cobra.Command {
 func ServerCommand() *cobra.Command {
 	var addr string
 	cmd := &cobra.Command{
-		Use: "server",
+		Use:   "server",
+		Short: "Starts a server",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			logger := log.New()
 			logger.Info("Starting server", "addr", addr)
@@ -42,14 +43,10 @@ func ServerCommand() *cobra.Command {
 				srv.Stop()
 			}()
 			logger.Info("Server started")
-			err = srv.Serve(
+			return srv.Serve(
 				cmd.Context(),
 				protocol.ScenarioHandler(logger, protocol.ServerScenario(qoute.New())),
 			)
-			if err != nil {
-				return err
-			}
-			return nil
 		},
 	}
 	cmd.Flags().StringVarP(&addr, "addr", "a", "0.0.0.0:5001", "listen address")
@@ -60,14 +57,15 @@ func ServerCommand() *cobra.Command {
 func ClientCommand() *cobra.Command {
 	var addr string
 	cmd := &cobra.Command{
-		Use: "ask-quote",
+		Use:   "ask-quote",
+		Short: "Asks a quote from a remote server",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := protocol.NewClient(addr)
 			quote, err := client.ExecScenario(cmd.Context(), protocol.ClientScenario())
 			if err != nil {
 				return err
 			}
-			cmd.Println(quote)
+			cmd.Printf("\n[*] Received quote: \"%s\"\n\n", quote)
 			return nil
 		},
 	}

@@ -61,7 +61,8 @@ func NewServer(addr string, opts ...ServerOption) (*Server, error) {
 	return srv, nil
 }
 
-// Serve serves the server
+// Serve serves the server. It blocks until the server is stopped or an error occurs
+// The server is stopped if the context is canceled or a quit signal is received
 func (s *Server) Serve(ctx context.Context, hd HandlerFunc) error {
 	defer s.wg.Done()
 	for {
@@ -90,12 +91,15 @@ func (s *Server) Stop() {
 func (s *Server) accept(ctx context.Context, hd HandlerFunc) error {
 	conn, err := s.listener.Accept()
 	if err != nil {
+		// check if the server is stopped
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-s.quit:
+			// don't return an error if the server is stopped
 			return nil
 		default:
+			// otherwise return the error
 			return err
 		}
 	}
@@ -105,12 +109,13 @@ func (s *Server) accept(ctx context.Context, hd HandlerFunc) error {
 		defer cancel()
 		s.wg.Add(1)
 		defer s.wg.Done()
+		// execute the handler for the accepted connection
 		_ = hd(ctx, &Conn{conn})
 	}()
 	return nil
 }
 
-// ScenarioHandler is a handler that executes a scenario
+// ScenarioHandler is a request handler that executes a scenario
 func ScenarioHandler(logger log.Logger, scenario Scenario) HandlerFunc {
 	return func(ctx context.Context, conn Connection) error {
 		quote, err := scenario.Execute(ctx, conn)

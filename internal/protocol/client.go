@@ -5,7 +5,7 @@ import (
 )
 
 type (
-	// Client is a client
+	// Client is a client implementation of the protocol
 	Client struct {
 		addr string
 	}
@@ -16,8 +16,10 @@ func NewClient(addr string) *Client {
 	return &Client{addr: addr}
 }
 
-// ExecScenario asks wisdom from remote server
+// ExecScenario executes the scenario of client part of the protocol and returns a quote
+// otherwise returns an empty string and an error
 func (c *Client) ExecScenario(ctx context.Context, scenario Scenario) (string, error) {
+	// Open a connection to the server
 	conn, err := Dial(c.addr)
 	if err != nil {
 		return "", err

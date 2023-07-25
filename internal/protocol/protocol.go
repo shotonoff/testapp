@@ -22,8 +22,6 @@ func init() {
 type (
 	// Connection is an interface for a transport layer
 	Connection interface {
-		Writer
-		Reader
 		Closer
 		MessageSender
 		MessageReceiver
@@ -77,6 +75,7 @@ type (
 )
 
 var (
+	// ErrInvalidProof is an error that is returned when a proof is invalid
 	ErrInvalidProof = errors.New("invalid proof")
 )
 
@@ -93,6 +92,10 @@ func (s Scenario) Execute(ctx context.Context, conn Connection) (Quote, error) {
 }
 
 // ClientScenario is a scenario execution for a client
+// it is a list of tasks that should be executed in order to get a quote from the server
+// 1. receiveChallenge - receive a challenge from the server
+// 2. solveChallenge - solve the challenge
+// 3. receiveQuote - receive a quote from the server
 func ClientScenario() Scenario {
 	return Scenario{
 		receiveChallenge,
@@ -102,6 +105,10 @@ func ClientScenario() Scenario {
 }
 
 // ServerScenario is a scenario execution for a server
+// it is a list of tasks that should be executed in order to send a quote to the client
+// 1. generateChallenge - generate a challenge
+// 2. receiveSolution - receive a solution from the client
+// 3. sendQuote - send a quote to the client
 func ServerScenario(quote *qoute.Store) Scenario {
 	return Scenario{
 		generateChallenge,
@@ -126,6 +133,8 @@ func Unmarshal(data []byte, msg any) error {
 	return gob.NewDecoder(buf).Decode(msg)
 }
 
+// Conn is a connection wrapper for a net.Conn
+// it provides a simple interface for reading and writing messages
 type Conn struct {
 	conn net.Conn
 }
@@ -224,7 +233,7 @@ func (c *Conn) Close() error {
 	return c.conn.Close()
 }
 
-// Dial dials a connection
+// Dial dials a tcp connection
 func Dial(addr string) (Connection, error) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	conn, err := net.DialTCP("tcp", nil, tcpAddr)
@@ -280,7 +289,7 @@ func receiveSolution(ctx context.Context, execState *ExecutionState, conn Connec
 
 func sendQuote(quote *qoute.Store) TaskFunc {
 	return func(ctx context.Context, execState *ExecutionState, conn Connection) error {
-		execState.Quote.Text = quote.Random()
+		execState.Quote.Text = quote.GetRandomQuote()
 		return conn.SendMsg(ctx, execState.Quote)
 	}
 }
