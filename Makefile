@@ -14,6 +14,9 @@ ask:
 	docker-compose run client
 .PHONY: ask
 
+docker/build:
+	docker-compose build
+
 run: start ask stop
 
 test:
