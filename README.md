@@ -11,18 +11,21 @@ This approach has chosen because it is simple, secure and stateless in the imple
 ### Challenge–response works as follows:
 
 1. The client connects to the server. 
-2. The server generates an arbitrary random data and sends it back to the client with difficulty.
-3. The client looks for the *NONCE* number with the *DIFFICULTY* and sends it back to the server.
-4. The server verifies the *NONCE* and *HASH* and sends the quote to the client.
+2. The server generates an arbitrary random data and sends it back to the client with difficulty for proof of work.
+3. The client uses brute-force to find the *NONCE* number and the *DIFFICULTY* condition. 
+4. Once the puzzle is solved, the client sends *NONCE* and computed *HASH* back to the server.
+5. The server verifies the *NONCE* and *HASH* and sends the quote to the client.
 
 ### Protocol implementation
 
 The data is transmitted in [gob](https://pkg.go.dev/encoding/gob) format.
 
 The protocol consists of two sections:
-1. 
-2. Header - contains the length of the data section.
-3. Payload - contains the data itself.
+
+| Field   | Size                | Description                             |
+|---------|---------------------|-----------------------------------------|
+| Header  | 4 bytes             | Contains the length of the data section |
+| Payload | based on the header | Contains the data itself                |
 
 #### Protocol messages
 
